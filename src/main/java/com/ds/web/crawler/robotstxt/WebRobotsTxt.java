@@ -10,14 +10,6 @@ package com.ds.web.crawler.robotstxt;
 public interface WebRobotsTxt {
 
 	/**
-	 * Initialize the Robots.txt i.e. read the contents and cache the same.
-	 *
-	 * @param crawledURL
-	 *            the web url
-	 */
-	void init(final String crawledURL);
-
-	/**
 	 * It works likes this: a robot wants to vists a Web site URL, say
 	 * http://www.example.com/welcome.html. Before it does so, it firsts checks
 	 * for http://www.example.com/robots.txt, and finds:

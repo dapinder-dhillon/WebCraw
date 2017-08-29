@@ -1,24 +1,22 @@
 package com.ds.web.crawler.mongo.entity;
 
-import java.io.Serializable;
-
 import org.apache.http.Header;
-import org.jsoup.nodes.Document;
+import org.apache.http.HttpEntity;
 
-public class HTMLPage implements Serializable {
-
-	/** The Constant serialVersionUID. */
-	private static final long serialVersionUID = 4651907667255024395L;
+public class HTMLPage  {
 
 	private String id;
 
+	private String url;
+	
 	private int statusCode;
-
-	private Document pageContent;
+	
+	private HttpEntity pageContent;
 
 	private Header[] fetchResponseHeaders;
+	
+	private String contentType;
 
-	private String url;
 
 	public String getUrl() {
 		return url;
@@ -44,11 +42,11 @@ public class HTMLPage implements Serializable {
 		this.statusCode = statusCode;
 	}
 
-	public Document getPageContent() {
+	public HttpEntity getPageContent() {
 		return pageContent;
 	}
 
-	public void setPageContent(Document pageContent) {
+	public void setPageContent(HttpEntity pageContent) {
 		this.pageContent = pageContent;
 	}
 
@@ -58,5 +56,13 @@ public class HTMLPage implements Serializable {
 
 	public void setFetchResponseHeaders(Header[] fetchResponseHeaders) {
 		this.fetchResponseHeaders = fetchResponseHeaders;
+	}
+
+	public String getContentType() {
+		return contentType;
+	}
+
+	public void setContentType(String contentType) {
+		this.contentType = contentType;
 	}
 }

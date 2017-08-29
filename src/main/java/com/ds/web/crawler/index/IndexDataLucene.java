@@ -2,7 +2,7 @@ package com.ds.web.crawler.index;
 
 import org.springframework.stereotype.Component;
 
-import com.ds.web.crawler.vo.ParsedData;
+import com.ds.web.crawler.mongo.entity.ParsedData;
 
 @Component("lucene")
 public class IndexDataLucene implements IndexData {

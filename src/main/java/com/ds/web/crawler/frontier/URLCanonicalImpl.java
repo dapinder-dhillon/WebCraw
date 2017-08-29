@@ -1,8 +1,5 @@
 package com.ds.web.crawler.frontier;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-
 import org.springframework.stereotype.Component;
 
 import com.ds.web.crawler.exception.WebCrawlerException;

@@ -1,9 +1,24 @@
 logging:
   level:
-    ROOT: DEBUG
+    ROOT: INFO
     org.springframework.web: ERROR
-    com.ds: DEBUG
+    com.ds: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file: logs/webcrawler.log
+
+#Crawler Configurations
+crawler:
+  followRedirects: true
+  maxOutgoingLinksToFollow: 20
+  maxConcurrentCrawlers: 4
+  politeness: -1
+  stopCrawl: false
+  proxy: true
+  proxyHost: 10.6.13.87
+  proxyPort: 8080
+  proxyScheme: http
+  corePoolSize: 4
+  maxPoolSize: 10
+  scheduleRate: 30000

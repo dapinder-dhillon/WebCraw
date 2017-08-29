@@ -1,6 +1,6 @@
 package com.ds.web.crawler.index;
 
-import com.ds.web.crawler.vo.ParsedData;
+import com.ds.web.crawler.mongo.entity.ParsedData;
 
 public interface IndexData {
 	

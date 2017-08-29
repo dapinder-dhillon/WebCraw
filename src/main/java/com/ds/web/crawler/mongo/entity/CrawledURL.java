@@ -20,23 +20,25 @@ package com.ds.web.crawler.mongo.entity;
 import java.io.Serializable;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 
 /**
  * The Class CrawledURL MongoDB Entity.
  */
 public class CrawledURL implements Serializable {
 
-	/**
-	 * 
-	 */
 	private static final long serialVersionUID = 742520371599474444L;
 
 	@Id
 	public String id;
+	
+	@Indexed(unique = true)
 	private String url;
 	private String parentId;
 	private String parentUrl;
 	private long when;
+	private boolean seen;
+	private boolean indexed;
 
 	public CrawledURL() {
 		super();
@@ -97,8 +99,25 @@ public class CrawledURL implements Serializable {
 		return url.hashCode();
 	}
 
+	public boolean isSeen() {
+		return seen;
+	}
+
+	public void setSeen(boolean seen) {
+		this.seen = seen;
+	}
+
+	public boolean isIndexed() {
+		return indexed;
+	}
+
+	public void setIndexed(boolean indexed) {
+		this.indexed = indexed;
+	}
+
 	@Override
 	public String toString() {
-		return url;
+		return url + " - [ID: " + this.id + "]";
 	}
+
 }

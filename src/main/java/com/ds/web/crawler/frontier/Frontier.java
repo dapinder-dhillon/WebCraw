@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,9 +17,11 @@ import org.springframework.util.CollectionUtils;
 
 import com.ds.web.crawler.config.WebCrawlerConfig;
 import com.ds.web.crawler.exception.WebCrawlerException;
+import com.ds.web.crawler.exception.WebCrawlerRuntimeException;
 import com.ds.web.crawler.mongo.entity.CrawledURL;
 import com.ds.web.crawler.mongo.repo.CrawledURLRepository;
 import com.ds.web.crawler.robotstxt.WebRobotsTxt;
+import com.google.common.base.Joiner;
 
 /**
  * The URL frontier maintains the URLs in the frontier and regurgitates them in
@@ -38,6 +41,8 @@ import com.ds.web.crawler.robotstxt.WebRobotsTxt;
 public class Frontier {
 
 	private static final Logger logger = LoggerFactory.getLogger(Frontier.class);
+	
+	private Object mutex = new Object();
 
 	private Map<String, Long> politenessHostMap = new HashMap<>();
 
@@ -57,24 +62,34 @@ public class Frontier {
 	private WebCrawlerConfig webCrawlerConfig;
 
 	public void schedule(CrawledURL crawledURL) {
-
 		String canonicalUrl = null;
 		try {
 			canonicalUrl = urlCanonical.get(crawledURL.getURL());
 		} catch (WebCrawlerException e) {
-			e.printStackTrace();
+			throw new WebCrawlerRuntimeException(e);
 		}
 
-		final CrawledURL crawledUrl = crawledURLRepository.findByUrl(canonicalUrl);
-		if (null != crawledUrl) {
-			//logger.info("URL Already seen: "+canonicalUrl);
-		} else {
-			robotsTxt.init(canonicalUrl);
-			boolean robotFlag = robotsTxt.allows(null, canonicalUrl);
-			boolean urlFilterFlag = urlFilter.match(canonicalUrl);
+		synchronized (mutex) {
+			final CrawledURL crawledUrl = crawledURLRepository.findByUrl(canonicalUrl);
+			if (null != crawledUrl) {
+				logger.info("URL Already seen: " + canonicalUrl);
+			} else {
+				boolean urlFilterFlag = urlFilter.match(canonicalUrl);
+				if (urlFilterFlag) {
+					logger.info(Joiner.on(StringUtils.EMPTY).join("URL: '", canonicalUrl,
+							"' ALLOWED as per Configured Filter"));
+				} else {
+					logger.info(Joiner.on(StringUtils.EMPTY).join("URL: '", canonicalUrl,
+							"' NOT_ALLOWED as per Configured Filter"));
+				}
 
-			if (robotFlag && urlFilterFlag) {
-				crawledURLRepository.save(crawledURL);
+				if (urlFilterFlag) {
+					boolean robotFlag = robotsTxt.allows(null, canonicalUrl);
+					logger.info(Joiner.on(" | ").join("User Agent on Robots.txt is \"", robotFlag, "\" for URL: ", canonicalUrl));
+					if (robotFlag) {
+						crawledURLRepository.save(crawledURL);
+					}
+				}
 			}
 		}
 	}
@@ -95,23 +110,42 @@ public class Frontier {
 	 */
 	public List<CrawledURL> getUrls(int max) {
 		List<CrawledURL> politeCrawledURLs = Collections.emptyList();
+		/*final CrawledURL query = new CrawledURL();
+		query.setSeen(true);
+		final ExampleMatcher matcher = ExampleMatcher.matching();
+		final Example<CrawledURL> exampleMatcher = Example.of(query, matcher);*/
 		final List<CrawledURL> crawledURLs = crawledURLRepository.findAll();
-
+		
 		if (!CollectionUtils.isEmpty(crawledURLs)) {
 			politeCrawledURLs = new ArrayList<>();
-			for (final CrawledURL crawledUrl : crawledURLs) {
-				final String host = getHost(crawledUrl.getURL());
-				final Long lastCrawledTime = this.politenessHostMap.get(host);
-				if (null == lastCrawledTime) {
-					politeCrawledURLs.add(crawledUrl);
-					this.politenessHostMap.put(host, System.currentTimeMillis());
-				} else {
-					boolean politenessFlag = ((System.currentTimeMillis() - lastCrawledTime) > webCrawlerConfig
-							.getPoliteness());
-					if (politenessFlag) {
+			if (webCrawlerConfig.getPoliteness() > 0) {
+				for (final CrawledURL crawledUrl : crawledURLs) {
+					final String host = getHost(crawledUrl.getURL());
+					final Long lastCrawledTime = this.politenessHostMap.get(host);
+					if (null == lastCrawledTime) {
 						politeCrawledURLs.add(crawledUrl);
+						this.politenessHostMap.put(host, System.currentTimeMillis());
 					} else {
-						//logger.info("Politeness Delay for Host: " + host);
+						boolean politenessFlag = ((System.currentTimeMillis() - lastCrawledTime) > webCrawlerConfig
+								.getPoliteness());
+						if (politenessFlag) {
+							politeCrawledURLs.add(crawledUrl);
+						} else {
+							logger.info("Politeness Delay for Host: " + host);
+						}
+					}
+				}
+			} else {
+				int i = 1;
+				for (final CrawledURL crawledUrl : crawledURLs) {
+					if (crawledUrl.isSeen() == false) {
+						politeCrawledURLs.add(crawledUrl);
+						crawledUrl.setSeen(true);
+						crawledURLRepository.save(crawledUrl);
+						// crawledURLRepository.delete(crawledUrl);
+						if (i == max) {
+							break;
+						}
 					}
 				}
 			}

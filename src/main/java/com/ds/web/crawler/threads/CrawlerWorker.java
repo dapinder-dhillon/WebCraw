@@ -1,29 +1,27 @@
 package com.ds.web.crawler.threads;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.concurrent.Callable;
 
 import org.apache.http.Header;
+import org.apache.http.HttpHost;
 import org.apache.http.HttpStatus;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ds.web.crawler.config.WebCrawlerConfig;
-import com.ds.web.crawler.exception.WebCrawlerException;
 import com.ds.web.crawler.frontier.Frontier;
 import com.ds.web.crawler.mongo.entity.CrawledURL;
 import com.ds.web.crawler.mongo.entity.CrawledURLBuilder;
 import com.ds.web.crawler.mongo.entity.HTMLPage;
-import com.ds.web.crawler.parser.HtmlParser;
-import com.ds.web.crawler.vo.ParsedData;
+import com.ds.web.crawler.mongo.entity.ParsedData;
+import com.ds.web.crawler.parser.Parse;
+import com.ds.web.crawler.parser.ParserFactory;
 
 /**
  * The Class CrawlerWorker. A crawler thread that begins by taking a URL from
@@ -41,58 +39,72 @@ public class CrawlerWorker implements Callable<ParsedData> {
 
 	private Frontier frontier;
 
-	private HtmlParser parser;
+	private ParserFactory parserFactory;
 
 	private WebCrawlerConfig webCrawlerConfig;
 
 	@Override
 	public ParsedData call() throws Exception {
+
+		logger.info("************************* Started Processing URL: " + this.crawledURL.getURL());
 		ParsedData htmlParseData = null;
-		final HttpUriRequest request = new HttpGet(this.crawledURL.getURL());
+		final HttpGet request = new HttpGet(this.crawledURL.getURL());
 		final HttpClientBuilder clientBuilder = HttpClientBuilder.create();
 		final CloseableHttpClient httpClient = clientBuilder.build();
-		final CloseableHttpResponse response = httpClient.execute(request);
 
-		final HTMLPage htmlPage = new HTMLPage();
-		htmlPage.setUrl(this.crawledURL.getURL());
-		htmlPage.setFetchResponseHeaders(response.getAllHeaders());
-		int statusCode = response.getStatusLine().getStatusCode();
-		htmlPage.setStatusCode(statusCode);
+		configureProxy(request);
 
-		if (statusCode == HttpStatus.SC_MOVED_PERMANENTLY || statusCode == HttpStatus.SC_MOVED_TEMPORARILY
-				|| statusCode == HttpStatus.SC_MULTIPLE_CHOICES || statusCode == HttpStatus.SC_SEE_OTHER
-				|| statusCode == HttpStatus.SC_TEMPORARY_REDIRECT) {
+		CloseableHttpResponse response = null;
+		try {
+			response = httpClient.execute(request);
+			final HTMLPage htmlPage = new HTMLPage();
+			htmlPage.setUrl(this.crawledURL.getURL());
+			htmlPage.setFetchResponseHeaders(response.getAllHeaders());
+			int statusCode = response.getStatusLine().getStatusCode();
+			htmlPage.setStatusCode(statusCode);
 
-			final Header header = response.getFirstHeader("Location");
-			if (header != null && webCrawlerConfig.isFollowRedirects()) {
-				final String movedToUrl = new URI(header.getValue()).normalize().getPath();
-				if (null != frontier.findURL(movedToUrl)) {
-					logger.info("This URL is already seen.");
-				} else {
-					CrawledURL crawledURL = new CrawledURLBuilder.Builder().setUrl(movedToUrl)
-							.setParentUrl(this.crawledURL.getURL()).build();
-					frontier.schedule(crawledURL);
+			if (statusCode == HttpStatus.SC_MOVED_PERMANENTLY || statusCode == HttpStatus.SC_MOVED_TEMPORARILY
+					|| statusCode == HttpStatus.SC_MULTIPLE_CHOICES || statusCode == HttpStatus.SC_SEE_OTHER
+					|| statusCode == HttpStatus.SC_TEMPORARY_REDIRECT) {
+
+				final Header header = response.getFirstHeader("Location");
+				if (header != null && webCrawlerConfig.isFollowRedirects()) {
+					final String movedToUrl = header.getValue();
+					if (null != frontier.findURL(movedToUrl)) {
+						logger.info("This URL is already seen.");
+					} else {
+						CrawledURL crawledURL = new CrawledURLBuilder.Builder().setUrl(movedToUrl)
+								.setParentUrl(this.crawledURL.getURL()).build();
+						frontier.schedule(crawledURL);
+					}
 				}
 			}
-		}
-		if (statusCode >= HttpStatus.SC_OK && statusCode <= 299) {
-			try {
-				final Document document = Jsoup.connect(crawledURL.getURL()).timeout(3000).get();
-				htmlPage.setPageContent(document);
+			if (statusCode >= HttpStatus.SC_OK && statusCode <= 299) {
+				logger.info("************************* HTTP_STATUS: " + statusCode);
+				htmlPage.setPageContent(response.getEntity());
+				htmlPage.setContentType(response.getEntity().getContentType().getValue());
+				Parse parser = parserFactory.getParser(htmlPage.getContentType());
 				htmlParseData = parser.parse(htmlPage);
-			} catch (IOException e) {
-				throw new WebCrawlerException(e);
 			}
+		} catch (IOException e1) {
+			logger.error("Exception connecting to URL: " + this.crawledURL.getURL());
+			throw e1;
 		}
 		return htmlParseData;
 	}
 
-	public HtmlParser getParser() {
-		return parser;
-	}
-
-	public void setParser(HtmlParser parser) {
-		this.parser = parser;
+	/**
+	 * Configure proxy if Required.
+	 *
+	 * @param request the request
+	 */
+	private void configureProxy(final HttpGet request) {
+		if (webCrawlerConfig.isProxy()) {
+			final HttpHost proxy = new HttpHost(webCrawlerConfig.getProxyHost(), webCrawlerConfig.getProxyPort(),
+					webCrawlerConfig.getProxyScheme());
+			final RequestConfig config = RequestConfig.custom().setProxy(proxy).build();
+			request.setConfig(config);
+		}
 	}
 
 	public Frontier getFrontier() {
@@ -117,6 +129,14 @@ public class CrawlerWorker implements Callable<ParsedData> {
 
 	public void setWebCrawlerConfig(WebCrawlerConfig webCrawlerConfig) {
 		this.webCrawlerConfig = webCrawlerConfig;
+	}
+
+	public ParserFactory getParserFactory() {
+		return parserFactory;
+	}
+
+	public void setParserFactory(ParserFactory parserFactory) {
+		this.parserFactory = parserFactory;
 	}
 
 }
