@@ -15,7 +15,7 @@ crawler:
   maxConcurrentCrawlers: 4
   politeness: -1
   stopCrawl: false
-  proxy: true
+  proxy: false
   proxyHost: 10.6.13.87
   proxyPort: 8080
   proxyScheme: http
